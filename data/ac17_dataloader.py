@@ -18,6 +18,7 @@ from skimage import transform
 from scipy.ndimage.interpolation import map_coordinates
 from scipy.ndimage.filters import gaussian_filter
 from scipy.ndimage.morphology import distance_transform_edt
+import cv2
 
 def augment_gamma(data_sample, gamma_range=(0.5, 2), invert_image=False, epsilon=1e-7, per_channel=False,
                   retain_stats=False):
@@ -55,6 +56,99 @@ def augment_gamma(data_sample, gamma_range=(0.5, 2), invert_image=False, epsilon
     if invert_image:
         data_sample = - data_sample
     return data_sample
+
+class SideWalkData(data.Dataset):
+
+    def __init__(self,
+                 root,
+                 split='train',
+                 augmentations=None,
+                 img_norm=True,
+                 k=5,
+                 k_split=1,
+                 target_size=(256, 256)
+                 ):
+        self.target_size = target_size
+        self.ROOT_PATH = root
+        self.split = split
+        self.k = k
+        self.split_len = int(200/self.k)
+        self.k_split = int(k_split)
+        self.augmentations = augmentations
+        self.TRAIN_IMG_PATH = os.path.join(root, 'train')
+        self.TRAIN_SEG_PATH = os.path.join(root, 'train_seg')
+        self.list = self.read_files()
+
+
+    def read_files(self):
+
+        l = []
+        count = 0
+
+        for root, dirs, files in os.walk(self.TRAIN_IMG_PATH, topdown=True):
+
+
+            for f in files:
+
+                if count >= 100:
+                    break
+
+                fname = f.split(".")[0]
+
+                # path = root + "/" + f
+                l.append(fname)
+
+                count+=1
+        return l
+
+    def __len__(self):
+        if self.split == "train":
+            return 100 - self.split_len
+        else:
+            return self.split_len
+
+    def __getitem__(self, i): # i is index
+        filename = self.list[i]
+        full_img_path = os.path.join(self.TRAIN_IMG_PATH, filename+".jpg")
+        full_seg_path = os.path.join(self.TRAIN_SEG_PATH, filename+".png")
+
+        img = cv2.imread(full_img_path)
+        seg = cv2.imread(full_seg_path)
+
+
+
+        if self.augmentations is not None:
+            img = img.transpose(2, 0, 1)
+            seg = seg.transpose(2, 0, 1)
+            img_c = np.zeros((img.shape[0], self.target_size[0], self.target_size[1]))
+            seg_c = np.zeros((seg.shape[0], self.target_size[0], self.target_size[1]))
+
+            for z in range(img.shape[0]):
+                if img[z].min() > 0:
+                    img[z] -= img[z].min()
+
+                img_tmp, seg_tmp = self.augmentations(img[z].astype(np.uint32)) , seg[z].astype(np.uint8)
+                img_tmp = augment_gamma(img_tmp)
+
+                mu = img_tmp.mean()
+                sigma = img_tmp.std()
+                img_tmp = (img_tmp - mu) / (sigma+1e-10)
+                img_c[z] = img_tmp
+                seg_c[z] = seg_tmp
+
+            img = img_c.transpose(1,2,0)
+            seg = seg_c.transpose(1,2,0)
+
+        img = torch.from_numpy(img).float()
+        seg = torch.from_numpy(seg).long()
+
+        data_dict = {
+            "name": filename,
+            "image": img,
+            "mask": seg,
+        }
+
+        return data_dict
 
 class AC17Data(data.Dataset):
 
@@ -286,13 +380,13 @@ class AC17_2DLoad():
 
         return values.reshape((height, width, channels))
 
-if __name__ == '__main__':
-
-    DATA_DIR = "/PATH/TO/AC17/DATA"
-    augs = Compose([PaddingCenterCrop(352)])
-    dataset = AC17Data(DATA_DIR, augmentations=augs)
-    ac17 = AC17_2DLoad(dataset)
-    dloader = torch.utils.data.DataLoader(ac17,batch_size=10)
-    for idx, batch in enumerate(dloader):
-        img, mask = batch['image'], batch['mask']
-        print(mask.shape, img.shape, mask.max(), mask.min(), img.max(), img.min())
+# if __name__ == '__main__':
+#
+#     DATA_DIR = "/PATH/TO/AC17/DATA"
+#     augs = Compose([PaddingCenterCrop(352)])
+#     dataset = AC17Data(DATA_DIR, augmentations=augs)
+#     ac17 = AC17_2DLoad(dataset)
+#     dloader = torch.utils.data.DataLoader(ac17,batch_size=10)
+#     for idx, batch in enumerate(dloader):
+#         img, mask = batch['image'], batch['mask']
+#         print(mask.shape, img.shape, mask.max(), mask.min(), img.max(), img.min())

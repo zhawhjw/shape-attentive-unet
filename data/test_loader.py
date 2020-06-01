@@ -14,6 +14,7 @@ import torch
 import random
 from .augmentations import ComposeTest, RandomRotate, PaddingCenterCropTest
 from skimage import transform
+import cv2
 
 class AC17Test(data.Dataset):
 
@@ -92,6 +93,102 @@ class AC17Test(data.Dataset):
             "orig": orig,
             "post_scale": post_scale,
             "scale": scale_vector
+        }
+
+        return data_dict
+
+    def _transform(self, img):
+        if img.ndim == 3:
+            img = np.expand_dims(img, axis=0)
+            img = np.concatenate((img, img, img), axis=0)
+        img = torch.from_numpy(img).float()
+        return img
+
+
+class SideWalkDataTest(data.Dataset):
+
+    def __init__(self,
+                 root,
+                 augmentations=None,
+                 target_size=(256, 256)
+                 ):
+        self.target_size = target_size
+        self.ROOT_PATH = root
+        self.augmentations = augmentations
+        self.TRAIN_IMG_PATH = os.path.join(root, 'test')
+        self.list = self.read_files()
+
+    def read_files(self):
+
+        l = []
+        count = 0
+
+        for root, dirs, files in os.walk(self.TRAIN_IMG_PATH, topdown=True):
+
+
+            for f in files:
+
+                if count >= 100:
+                    break
+
+                fname = f.split(".")[0]
+
+                # path = root + "/" + f
+                l.append(fname)
+
+                count+=1
+        return l
+    def __len__(self):
+        return 100
+
+    def __getitem__(self, i): # i is index
+        # filename = "patient%03d_frame%02d" % (self.list[i][0], self.list[i][1])
+        # full_img_path = os.path.join(self.TRAIN_IMG_PATH, filename)
+        # img = nibabel.load(full_img_path+".nii")
+        # pix_dim = img.header.structarr['pixdim'][1]
+        # img = np.array(img.get_data())
+        filename = self.list[i]
+        full_img_path = os.path.join(self.TRAIN_IMG_PATH, filename + ".jpg")
+
+        img = cv2.imread(full_img_path)
+        orig = img
+
+        # ratio = float(pix_dim/1.5)
+        # scale_vector = [ratio, ratio, 1]
+
+
+        post_scale = img
+
+        if self.augmentations is not None:
+            img = img.transpose(2, 0, 1)
+            img_c = np.zeros((img.shape[0], self.target_size[0], self.target_size[1]))
+
+            for z in range(img.shape[0]):
+                if img[z].min() > 0:
+                    img[z] -= img[z].min()
+
+                img_tmp = self.augmentations(img[z].astype(np.uint32))
+
+                # if self.img_norm:
+                #     mu = img_tmp.mean()
+                #     sigma = img_tmp.std()
+                #     img_tmp = (img_tmp - mu) / (sigma+1e-10)
+                # img_c[z] = img_tmp
+
+            img = img_c.transpose(1,2,0)
+        img = self._transform(img)
+
+        # if filename.endswith('01'):
+        #     filename = filename[:-7] + 'ED'
+        # else:
+        #     filename = filename[:-7] + 'ES'
+
+        data_dict = {
+            "name": filename,
+            "image": img,
+            "orig": orig,
+            "post_scale": post_scale,
+            # "scale": scale_vector
         }
 
         return data_dict

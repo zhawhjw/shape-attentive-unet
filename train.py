@@ -22,6 +22,9 @@ import numpy as np
 from loss import DualLoss
 from radam import RAdam
 
+
+from data.ac17_dataloader import SideWalkData
+
 def eval(loader_val, segmentation_module, args, crit):
     intersection_meter = AverageMeter()
     union_meter = AverageMeter()
@@ -71,8 +74,8 @@ def train(segmentation_module, loader_train, optimizers, history, epoch, args):
     ave_total_loss = AverageMeter()
     ave_acc = AverageMeter()
     ave_j1 = AverageMeter()
-    ave_j2 = AverageMeter()
-    ave_j3 = AverageMeter()
+    # ave_j2 = AverageMeter()
+    # ave_j3 = AverageMeter()
 
     segmentation_module.train(not args.fix_bn)
 
@@ -114,8 +117,8 @@ def train(segmentation_module, loader_train, optimizers, history, epoch, args):
         ave_acc.update(acc.data.item()*100)
 
         ave_j1.update(jaccard[0].data.item()*100)
-        ave_j2.update(jaccard[1].data.item()*100)
-        ave_j3.update(jaccard[2].data.item()*100)
+        # ave_j2.update(jaccard[1].data.item()*100)
+        # ave_j3.update(jaccard[2].data.item()*100)
 
         if iter_count % (args.batch_size_per_gpu*10) == 0:
             # calculate accuracy, and display
@@ -128,19 +131,28 @@ def train(segmentation_module, loader_train, optimizers, history, epoch, args):
                         args.running_lr_encoder, args.running_lr_decoder,
                         ave_acc.average(), ave_total_loss.average()))
             else:
+                # print('Epoch: [{}/{}], Iter: [{}], Time: {:.2f}, Data: {:.2f},'
+                #         ' lr_unet: {:.6f}, Accuracy: {:4.2f}, Jaccard: [{:4.2f},{:4.2f},{:4.2f}], '
+                #         'Loss: {:.6f}'
+                #         .format(epoch, args.max_iters, iter_count,
+                #             batch_time.average(), data_time.average(),
+                #             args.running_lr_encoder, ave_acc.average(),
+                #             ave_j1.average(), ave_j2.average(),
+                #             ave_j3.average(), ave_total_loss.average()))
+
                 print('Epoch: [{}/{}], Iter: [{}], Time: {:.2f}, Data: {:.2f},'
-                        ' lr_unet: {:.6f}, Accuracy: {:4.2f}, Jaccard: [{:4.2f},{:4.2f},{:4.2f}], '
-                        'Loss: {:.6f}'
-                        .format(epoch, args.max_iters, iter_count,
-                            batch_time.average(), data_time.average(),
-                            args.running_lr_encoder, ave_acc.average(),
-                            ave_j1.average(), ave_j2.average(),
-                            ave_j3.average(), ave_total_loss.average()))
+                      ' lr_unet: {:.6f}, Accuracy: {:4.2f}, Jaccard: [{:4.2f}], '
+                      'Loss: {:.6f}'
+                      .format(epoch, args.max_iters, iter_count,
+                              batch_time.average(), data_time.average(),
+                              args.running_lr_encoder, ave_acc.average(),
+                              ave_j1.average(), ave_total_loss.average()))
 
     #Average jaccard across classes.
-    j_avg = (ave_j1.average() + ave_j2.average() + ave_j3.average())/3
+    # j_avg = (ave_j1.average() + ave_j2.average() + ave_j3.average())/3
+    j_avg = ave_j1.average()
 
-    #Update the training history
+             #Update the training history
     history['train']['epoch'].append(epoch)
     history['train']['loss'].append(loss.data.item())
     history['train']['acc'].append(acc.data.item())
@@ -236,11 +248,17 @@ def main(args):
     test_augs = Compose([PaddingCenterCrop(256)])
 
     # Dataset and Loader
-    dataset_train = AC17( #Loads 3D volumes
-            root=args.data_root,
-            split='train',
-            k_split=args.k_split,
-            augmentations=train_augs)
+    # dataset_train = AC17( #Loads 3D volumes
+    #         root=args.data_root,
+    #         split='train',
+    #         k_split=args.k_split,
+    #         augmentations=train_augs)
+
+    dataset_train = SideWalkData(  # Loads 3D volumes
+                root=args.data_root,
+                split='train',
+                k_split=args.k_split,
+                augmentations=train_augs)
     ac17_train = load2D(dataset_train, split='train', deform=True) #Dataloader for 2D slices. Requires 3D loader.
 
     loader_train = data.DataLoader(
@@ -251,7 +269,7 @@ def main(args):
         drop_last=True,
         pin_memory=True)
 
-    dataset_val = AC17(
+    dataset_val = SideWalkData(
             root=args.data_root,
             split='val',
             k_split=args.k_split,

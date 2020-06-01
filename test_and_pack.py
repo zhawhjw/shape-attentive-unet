@@ -25,6 +25,8 @@ import random
 from PIL import Image, ImageOps
 from skimage import transform
 
+from data.test_loader import SideWalkDataTest as SideWalkData
+
 def round_num(x):
     return int(x) + 1 if (x-int(x)) >= 0.5 else int(x)
 
@@ -61,19 +63,20 @@ def undo_crop(img, pred): #img is original image:w
 
 def resample_to_orig(data, pred):
     #uncrop
-    p_stack = np.zeros_like(data["post_scale"])
-    for i in range(data["orig"].shape[-1]):
-        p = undo_crop(data["post_scale"][:,:,i], pred[:,:,i])
-        p_stack[:,:,i] = p
-    #rescale
-    p_stack = transform.resize(p_stack,
+    # p_stack = np.zeros_like(data["post_scale"])
+    # for i in range(data["orig"].shape[-1]):
+    #     p = undo_crop(data["post_scale"][:,:,i], pred[:,:,i])
+    #     p_stack[:,:,i] = p
+    # #rescale
+    p_stack = transform.resize(pred,
                           data['orig'].shape,
                           order=0,
                           preserve_range=True,
                           mode='constant')
-
-    assert data["orig"].shape == p_stack.shape, "Error while resampling"
+    #
+    # assert data["orig"].shape == p_stack.shape, "Error while resampling"
     return p_stack
+
 
 def visualize_result(data, pred, args):
     (img, info) = data
@@ -89,10 +92,24 @@ def visualize_result(data, pred, args):
     cv2.imwrite(os.path.join(args.result,
                 img_name), im_vis)
 
+def visualize_whole(data, pred, args):
+    (img, info) = data
+
+    #normalize image to [0, 1] first.
+    img = (img - img.min())/(img.max()-img.min())
+    img = (img * 255).astype(np.uint8) #Then scale it up to [0, 255] to get the final image.
+    pred_img = (pred * 85).astype(np.uint8)
+
+    #heat = get_heatmap(LRP)
+    im_vis = np.concatenate((img, pred_img), axis=1).astype(np.uint8)
+    img_name = info.split('/')[-1] + '_whole.png'
+    cv2.imwrite(os.path.join(args.result,
+                img_name), im_vis)
 
 def save_as_nifti(pred, path, name):
-    img = nib.Nifti1Image(pred, np.eye(4))
-    img.to_filename(os.path.join(path, str(name)+'.nii.gz'))
+    # img = nib.Nifti1Image(pred, np.eye(4))
+    # img.to_filename(os.path.join(path, str(name)+'.nii.gz'))
+    cv2.imwrite(path + name + ".jpg",pred)
     print("Saved " + str(name) + "!")
 
 def evaluate(sm, loader_val, args):
@@ -121,16 +138,25 @@ def evaluate(sm, loader_val, args):
 
             time_meter.update(time.perf_counter() - tic)
         pv_resized = resample_to_orig(batch_data, pred_volume)
+
         save_as_nifti(pv_resized, args.save_test_path, batch_data["name"])
+
+
         if args.visualize:
             for z in range(batch_data['orig'].shape[-1]):
                 visualize_result(
                         (batch_data['orig'][:,:,z], batch_data["name"]+str(z)),
                         pv_resized[:,:, z], args)
 
+            visualize_whole(
+                (batch_data['orig'][:, :, :], batch_data["name"]),
+                pv_resized[:, :, :], args)
+
+
         torch.cuda.synchronize()
 
         pbar.update(1)
+
 
 def main(args):
     torch.cuda.set_device(args.gpu)
@@ -147,13 +173,26 @@ def main(args):
     sm = SegmentationModule(crit, unet)
     test_augs = ComposeTest([PaddingCenterCropTest(256)])
 
-    ac17 = AC17(
-            root=args.data_root,
-            augmentations=test_augs,
-            img_norm=args.img_norm)
 
-    loader_val = data.DataLoader(
-        ac17,
+    dataset_test = SideWalkData(  # Loads 3D volumes
+                root=args.data_root,
+                augmentations=test_augs)
+
+    # ac17 = AC17(
+    #         root=args.data_root,
+    #         augmentations=test_augs
+    # )
+
+    # loader_val = data.DataLoader(
+    #     ac17,
+    #     batch_size=1,
+    #     shuffle=False,
+    #     collate_fn=user_scattered_collate,
+    #     num_workers=5,
+    #     drop_last=True)
+
+    loader_test = data.DataLoader(
+        dataset_test,
         batch_size=1,
         shuffle=False,
         collate_fn=user_scattered_collate,
@@ -163,7 +202,7 @@ def main(args):
     sm.cuda()
 
     # Main loop
-    evaluate(sm, loader_val, args)
+    evaluate(sm, loader_test, args)
 
     print('Evaluation Done!')
 
@@ -212,6 +251,7 @@ if __name__ == '__main__':
     parser.add_argument('--show_SRmap', default=True, type=bool,
                         help='Show the saliency relevance mapping')
     parser.add_argument('--save_test_path', default='./test_files')
+    parser.add_argument('--weights_unet1', default='')
 
     args = parser.parse_args()
 
