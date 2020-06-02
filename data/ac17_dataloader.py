@@ -90,7 +90,7 @@ class SideWalkData(data.Dataset):
 
             for f in files:
 
-                if count >= 20000:
+                if count >= 100:
                     break
 
                 fname = f.split(".")[0]
@@ -183,7 +183,7 @@ class TestSideWalkData(data.Dataset):
 
             for f in files:
 
-                if count >= 20000:
+                if count >= 100:
                     break
 
                 fname = f.split(".")[0]
