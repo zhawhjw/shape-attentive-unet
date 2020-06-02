@@ -24,6 +24,7 @@ from radam import RAdam
 
 
 from data.ac17_dataloader import SideWalkData
+from data.ac17_dataloader import  TestSideWalkData
 
 def eval(loader_val, segmentation_module, args, crit):
     intersection_meter = AverageMeter()

@@ -90,6 +90,9 @@ class SideWalkData(data.Dataset):
 
             for f in files:
 
+                if count >= 20000:
+                    break
+
                 fname = f.split(".")[0]
 
                 # path = root + "/" + f
@@ -179,6 +182,9 @@ class TestSideWalkData(data.Dataset):
 
 
             for f in files:
+
+                if count >= 20000:
+                    break
 
                 fname = f.split(".")[0]
 
