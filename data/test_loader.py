@@ -125,7 +125,6 @@ class SideWalkDataTest(data.Dataset):
 
         for root, dirs, files in os.walk(self.TRAIN_IMG_PATH, topdown=True):
 
-
             for f in files:
 
                 if count >= 100:
@@ -139,7 +138,7 @@ class SideWalkDataTest(data.Dataset):
                 count+=1
         return l
     def __len__(self):
-        return 100
+        return len(self.list)
 
     def __getitem__(self, i): # i is index
         # filename = "patient%03d_frame%02d" % (self.list[i][0], self.list[i][1])

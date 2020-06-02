@@ -90,9 +90,6 @@ class SideWalkData(data.Dataset):
 
             for f in files:
 
-                if count >= 100:
-                    break
-
                 fname = f.split(".")[0]
 
                 # path = root + "/" + f
@@ -103,7 +100,7 @@ class SideWalkData(data.Dataset):
 
     def __len__(self):
         if self.split == "train":
-            return 100 - self.split_len
+            return len(self.list) - self.split_len
         else:
             return self.split_len
 
