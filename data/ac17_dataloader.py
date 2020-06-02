@@ -124,7 +124,7 @@ class SideWalkData(data.Dataset):
                 if img[z].min() > 0:
                     img[z] -= img[z].min()
 
-                img_tmp, seg_tmp = self.augmentations(img[z].astype(np.uint32)) , seg[z].astype(np.uint8)
+                img_tmp, seg_tmp = self.augmentations(img[z].astype(np.uint32) , seg[z].astype(np.uint8))
                 img_tmp = augment_gamma(img_tmp)
 
                 mu = img_tmp.mean()
